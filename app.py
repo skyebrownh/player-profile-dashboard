@@ -12,7 +12,9 @@ team_names = np.unique(play_half['market'])
 player_names = np.unique(play_half['full_name'])
 
 # Box Score Options
-# Does season averages do anything?
+
+#TODO: Does season averages do anything?
+
 box_score_view = ['General','Shooting % By Half','Season Averages']
 season_view = [2019,2018,2017,2016]
 
@@ -24,6 +26,7 @@ app.layout = html.Div(children=[
 
     #Title
     html.H1(children='NCAA Player Profile Dashboard',style={'textAlign':'center'}),
+
     ##################################################
     # Player Averages
     ##################################################
@@ -68,6 +71,7 @@ app.layout = html.Div(children=[
         )
     ),
     ##################################################
+
     # Advanced Stats
     ##################################################
     html.H3(children='Advanced Stats',style={'textAlign':'left'}),
@@ -191,10 +195,11 @@ def player_box_scores(team, table_view, player, season):
     elif(table_view =='Shooting % By Half'):
         column_labels = ['Date','Opponent','Half', 'Minutes','FG%','FT%','2PT%','3PT%','TS%','EFG%']
     columns = [{"name":i,"id":i} for i in column_labels]
+
     #ah is apphelper.py ,
     datadf,data = ah.box_score_data(player,table_view,season)
     columns=[{"name":i,"id":i} for i in datadf.columns]
-    print(datadf)
+    
     
     return roster_check_options, columns,data
 
@@ -222,6 +227,7 @@ def player_averages(team, player, season):
 
     #return roster_options, columns, data
     return roster_check_options,columns,data
+
 
 ##################################################
 # Advanced Stats
@@ -260,6 +266,7 @@ def advanced_stats(team, player, season):
 
 ##################################################
 ##################################################
+
 
 if __name__ == '__main__':
     app.run_server(debug=True,  port= 8050)
