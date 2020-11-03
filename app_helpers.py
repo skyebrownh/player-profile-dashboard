@@ -9,7 +9,8 @@ from plotly.subplots import make_subplots
 pd.options.mode.chained_assignment = None
 
 play_half = pd.read_csv('./player_half_v1.csv')
-#league_info = pd.read_csv('./league_info.csv')
+# league_info = pd.read_csv('./league_info.csv')
+team_boxscore = pd.read_csv('team_boxscores_v1.csv')
 team_names = np.unique(play_half['market'])
 player_names = np.unique(play_half['full_name'])
 
@@ -77,7 +78,6 @@ def box_score_data(player, table_view, season):
         #2nd period  
         p2 = play_half[(play_half['full_name'] == player) & (play_half['season'] == season) & (play_half['period'] == 2)][
             stats]
-        
         comb = pd.merge(p1, p2, on='game_id') #_x,_y
         datadf = pd.merge(comb, unq, on='game_id') #_x,_x #_y,_x
 
@@ -160,6 +160,7 @@ def box_score_data(player, table_view, season):
                            {'points':'Points', 'rebounds':'Rebounds', 'blocks':'Blocks', 'assists':'Assists', 'turnovers':'Turnovers'})
         #print(datadf)
         
+
         '''
         WARNINGS:
         AS IT IS NOW, THE DATA FRAME CREATED CONFLICTS WITH SOMETHING IN APP.PY I BELIEVE, I THINK THIS NEEDS TO BE CHANGED TO DISPLAY THE DATA FRAME ON THE WEBSITE
@@ -179,7 +180,113 @@ def box_score_data(player, table_view, season):
 
 
 ##################################################
+# ADVANCED STATS HELPER
+##################################################
+
+def advanced_stats(player, season):
+    # USG%: 100 * ((FGA + 0.44 * FTA + TOV) * (Tm MP / 5)) / (MP * (Tm FGA + 0.44 * Tm FTA + Tm TOV))
+    # ORtg:
+    # AST%: 100 * AST / (((MP / (Tm MP / 5)) * Tm FG) - FG)
+    # TOV%: 100 * TOV / (FGA + 0.44 * FTA + TOV)
+    # ORB%: 100 * (ORB * (Tm MP / 5)) / (MP * (Tm ORB + Opp DRB))
+    # BLK%: 100 * (BLK * (Tm MP / 5)) / (MP * (Opp FGA - Opp 3PA))
+    # STL%: 100 * (STL * (Tm MP / 5)) / (MP * Opp Poss)
+    # Poss: 0.5 * ((Tm FGA + 0.4 * Tm FTA - 1.07 * (Tm ORB / (Tm ORB + Opp DRB)) * (Tm FGA - Tm FG) + Tm TOV) +
+    # (Opp FGA + 0.4 * Opp FTA - 1.07 * (Opp ORB / (Opp ORB + Tm DRB)) * (Opp FGA - Opp FG) + Opp TOV))
+    # Opp Poss: 0.5 * ((Opp FGA + 0.4 * Opp FTA - 1.07 * (Opp ORB / (Opp ORB + Tm DRB)) * (Opp FGA - Opp FG) + Opp TOV) +
+    # (Tm FGA + 0.4 * Tm FTA - 1.07 * (Tm ORB / (Tm ORB + Opp DRB)) * (Tm FGA - Tm FG) + Tm TOV))
+    # FOUL%:
+    # DRB%: 100 * (DRB * (Tm MP / 5)) / (MP * (Tm DRB + Opp ORB))
+    player_categories = ['game_id', 'field_goals_att', 'field_goals_made', 'free_throws_att', 'turnovers', 'assists',
+                         'total_minutes', 'offensive_rebounds', 'blocks', 'steals', 'defensive_rebounds']
+    team_categories = ['game_id', 'minutes', 'field_goals_att', 'free_throws_att', 'turnovers', 'field_goals_made',
+                  'offensive_rebounds', 'defensive_rebounds', 'three_points_att']
+    # 1st half
+    p1 = play_half[(play_half['full_name'] == player) & (play_half['season'] == season) & (play_half['period'] == 1)][
+        player_categories]
+    # 2nd half
+    p2 = play_half[(play_half['full_name'] == player) & (play_half['season'] == season) & (play_half['period'] == 2)][
+        player_categories]
+
+    comb = pd.merge(p1, p2, on='game_id')
+    player_stats = comb.drop_duplicates()
+
+    # combines the two halfs, literally copied and pasted from 'General' stats
+    for i in player_categories:
+        if i != 'game_id':
+            x = i + "_x"
+            y = i + "_y"
+            player_stats[i] = player_stats[x] + player_stats[y]
+    player_stats['total_minutes'] = player_stats['total_minutes_x']
+    # drops extra _x and _y columns and gives us only the combined columns
+    player_stats = player_stats[player_categories]
+    team_name = np.unique(play_half[(play_half['full_name'] == player)]['market'])
+    # have to do this to access the actual value
+    team_name = team_name[0]
+
+    team = team_boxscore[(team_boxscore['market'] == team_name) &
+                         (team_boxscore['game_id'].isin(player_stats['game_id']))][team_categories]
+    opponent = team_boxscore[(team_boxscore['market'] != team_name) &
+                         (team_boxscore['game_id'].isin(player_stats['game_id']))][team_categories]
+
+    comb = pd.merge(team, opponent, on='game_id')
+    comb = pd.merge(player_stats, comb, on='game_id')
+    df = comb.drop_duplicates()
+
+    FGA = 'field_goals_att'; tm_FGA = FGA+'_x'; opp_FGA = FGA+'_y'
+    FTA = 'free_throws_att'; tm_FTA = FTA+'_x'; opp_FTA = FTA+'_y'
+    TOV = 'turnovers'; tm_TOV = TOV+'_x'; opp_TOV = TOV+'_y'
+    MP = 'total_minutes'; tm_MP = 'minutes_x'; opp_MP = 'minutes_y'
+    FG = 'field_goals_made'; tm_FG = FG+'_x'; opp_FG = FG+'_y'
+    AST = 'assists';
+    ORB = 'offensive_rebounds'; tm_ORB = ORB+'_x'; opp_ORB = ORB+'_y'
+    BLK = 'blocks'
+    STL = 'steals'
+    DRB = 'defensive_rebounds'; tm_DRB = DRB+'_x'; opp_DRB = DRB+'_y'
+    tm_3PA = 'three_points_att_x'; opp_3PA = 'three_points_att_y';
+    opp_Poss = 'opp_poss'
+    df[MP] = df[MP].str.split(':').str.get(0)
+    df[tm_MP] = df[tm_MP].str.split(':').str.get(0).astype(int) * 60 + df[tm_MP].str.split(
+        ':').str.get(1).astype(int)
+    df[opp_MP] = df[opp_MP].str.split(':').str.get(0).astype(int) * 60 + df[opp_MP].str.split(
+        ':').str.get(1).astype(int)
+    for i in df:
+        if i != 'game_id':
+            df[i] = df[i].astype(int)
+
+    oppPoss=0.5*((df[opp_FGA]+0.4*df[opp_FTA]-1.07*(df[opp_ORB]/(df[opp_ORB]+df[tm_DRB]))*(df[opp_FGA]-df[opp_FG])
+      +df[opp_TOV])+(df[tm_FGA]+0.4*df[tm_FTA]-1.07*(df[tm_ORB]/(df[tm_ORB]+df[opp_DRB]))*(df[tm_FGA]-df[tm_FG])+df[tm_TOV]))
+    df['opp_poss'] = oppPoss
+
+    USG = 100 * ((df[FGA]+ 0.44 * df[FTA] + df[TOV]) * (df[tm_MP] / 5)) / (df[MP] * (df[tm_FGA] + 0.44 * df[tm_FTA]
+        + df[tm_TOV]))
+    AST = 100 * df[AST] / (((df[MP] / (df[tm_MP] / 5)) * df[tm_FG]) - df[FG])
+    TOV = 100 * df[TOV] / (df[FGA] + 0.44 * df[FTA] + df[TOV])
+    ORB = 100 * (df[ORB] * (df[tm_MP] / 5)) / (df[MP] * (df[tm_ORB] + df[opp_DRB]))
+    BLK = 100 * (df[BLK] * (df[tm_MP] / 5)) / (df[MP] * (df[opp_FGA] - df[opp_3PA]))
+    STL = 100 * (df[STL] * (df[tm_MP] / 5)) / (df[MP] * df[opp_Poss])
+    DRB = 100 * (df[DRB] * (df[tm_MP] / 5)) / (df[MP] * (df[tm_DRB] + df[opp_ORB]))
+
+    dataframe = df[['game_id']].copy()
+    dataframe['USG%'] = USG
+    dataframe['AST%'] = AST
+    dataframe['TOV%'] = TOV
+    dataframe['ORB%'] = ORB
+    dataframe['BLK%'] = BLK
+    dataframe['STL%'] = STL
+    dataframe['DRB%'] = DRB
+    avg_columns = dataframe.mean(axis=0)
+    # rounds the columns
+    avg_columns = avg_columns.round(decimals=1)
+
+    datadf = pd.DataFrame(avg_columns)
+    datadf = datadf.transpose()
+
+
+    data = datadf.to_dict('records')
+    #   print(data)
+    return datadf, data
+
+##################################################
 # Add new helpers here!
-##################################################
-##################################################
 ##################################################
