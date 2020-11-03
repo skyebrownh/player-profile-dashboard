@@ -12,6 +12,7 @@ team_names = np.unique(play_half['market'])
 player_names = np.unique(play_half['full_name'])
 
 # Box Score Options
+# Does season averages do anything?
 box_score_view = ['General','Shooting % By Half','Season Averages']
 season_view = [2019,2018,2017,2016]
 
@@ -23,7 +24,7 @@ app.layout = html.Div(children=[
 
     #Title
     html.H1(children='NCAA Player Profile Dashboard',style={'textAlign':'center'}),
-        ##################################################
+    ##################################################
     # Player Averages
     ##################################################
     html.H3(children='Player Averages',style={'textAlign':'left'}),
@@ -55,6 +56,49 @@ app.layout = html.Div(children=[
     ]),
     html.Div(
         dt.DataTable(id='player_avg',
+            style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold', 'textAlign': 'center'},
+            style_cell={'textAlign': 'center'},
+            style_header_conditional=[
+                {
+                    'if':{'column_id':'scheduled'},
+                    'column_name':'Date',
+                    'column_type':'datetime'
+                },
+            ]
+        )
+    ),
+    ##################################################
+    # Advanced Stats
+    ##################################################
+    html.H3(children='Advanced Stats',style={'textAlign':'left'}),
+    html.Div([
+        #filters at the top
+        html.Div([
+            dcc.Dropdown(
+                #identfier that correspods
+                id='advanced_season',
+                options=[{'label': i, 'value': i} for i in season_view],
+                value=2019
+            )
+        ], style={'width': '10%', 'float': 'center', 'display': 'inline-block'}),
+        html.Div([
+            dcc.Dropdown(
+                id='advanced_team',
+                # placeholder='Select Team',
+                value='Kentucky',
+                options=[{'label':team_names[i], 'value':team_names[i]} for i in range(len(team_names))],
+            ),
+        ], style={'width': '25%', 'float': 'center', 'display': 'inline-block'}),
+        html.Div([
+            dcc.Dropdown(
+                id='advanced_player',
+                value='Ashton Hagans',
+                #options = [{'label':player_names[i], 'value':player_names[i]} for i in range(len(player_names))],
+            )
+        ], style={'width': '25%', 'float': 'center', 'display': 'inline-block'}),
+    ]),
+    html.Div(
+        dt.DataTable(id='advanced_stats',
             style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold', 'textAlign': 'center'},
             style_cell={'textAlign': 'center'},
             style_header_conditional=[
@@ -124,6 +168,7 @@ app.layout = html.Div(children=[
 # Box Score With Team and Player Select
 ##################################################
 # For the box score table
+
 @app.callback(
     dash.dependencies.Output('player_select_box_scores','options'),
     dash.dependencies.Output('player_box_score','columns'),
@@ -146,10 +191,10 @@ def player_box_scores(team, table_view, player, season):
     elif(table_view =='Shooting % By Half'):
         column_labels = ['Date','Opponent','Half', 'Minutes','FG%','FT%','2PT%','3PT%','TS%','EFG%']
     columns = [{"name":i,"id":i} for i in column_labels]
-    #ah is apphelper.py , 
+    #ah is apphelper.py ,
     datadf,data = ah.box_score_data(player,table_view,season)
     columns=[{"name":i,"id":i} for i in datadf.columns]
-
+    print(datadf)
     
     return roster_check_options, columns,data
 
@@ -177,16 +222,44 @@ def player_averages(team, player, season):
 
     #return roster_options, columns, data
     return roster_check_options,columns,data
+
+##################################################
+# Advanced Stats
+##################################################
+
+@app.callback(
+
+    dash.dependencies.Output('advanced_player','options'),
+    dash.dependencies.Output('advanced_stats','columns'),
+    dash.dependencies.Output('advanced_stats', 'data'),
+    dash.dependencies.Input('advanced_team','value'),
+    dash.dependencies.Input('advanced_player','value'),
+    dash.dependencies.Input('advanced_season','value')
+)
+
+def advanced_stats(team, player, season):
+    roster = np.unique(play_half[(play_half['market'] == team)]['full_name'])
+    roster_options = [{'label': i, 'value': i} for i in roster]
+    roster_check = np.unique(play_half[(play_half['market'] == team) & (play_half['season'] == season)]['full_name'])
+    roster_check_options = [{'label': i, 'value': i} for i in roster_check]
+    table_view = 'Advanced Stats'
+    column_labels = ['USG%', 'AST%', 'TOV%', 'ORB%', 'BLK%', 'STL%', 'DRB%']
+    columns = [{"name":i,"id":i} for i in column_labels]
+    #ah is apphelper.py
+    datadf,data = ah.advanced_stats(player, season)
+    columns=[{"name":i,"id":i} for i in datadf.columns]
+
+    #return roster_options, columns, data
+    return roster_check_options,columns,data
+
+
+
+##################################################
+# INSERT NEW ELEMENTS HERE                       #
+##################################################
+
 ##################################################
 ##################################################
-
-
-    ##################################################
-    # INSERT NEW ELEMENTS HERE                       #
-    ##################################################
-
-    ##################################################
-    ##################################################
 
 if __name__ == '__main__':
     app.run_server(debug=True,  port= 8050)
