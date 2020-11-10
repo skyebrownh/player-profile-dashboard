@@ -80,9 +80,11 @@ def box_score_data(player, table_view, season):
     data = box_scores.to_dict('records')
     return box_scores,data
 
+
 ##################################################
 # SEASON AVERAGES & SHOOTING STATS HELPER
 ##################################################
+
 
 def player_average_data(player, table_view,season):
     # ['General', 'Advanced', 'Per 36','Per 100 Poss.']
@@ -143,12 +145,13 @@ def player_average_data(player, table_view,season):
 
 
     #################################################################
-    # TO ADD PER 40, & PER 100 Possessions
+    # Calculate PER 40, & PER 100 Possessions
     #################################################################
     elif table_view == 'Per 40 Min.':
         stats = ['points', 'rebounds', 'offensive_rebounds', 'defensive_rebounds', 'assists', 'blocks', 'turnovers']
-        avg = (season_avg[stats]/season_avg['total_minutes'][0]) *40.0
+        avg = (season_avg[stats]/season_avg['total_minutes'][0]) *40.0          # PER 40 = stat/MP * 40 min
         avg = np.round(avg, 1)
+        # Rename column headers
         avg = avg.rename(columns=
                          {'points': 'Points', 'rebounds': 'Total Rebounds', 'offensive_rebounds': 'ORB',
                           'defensive_rebounds': 'DRB', 'blocks': 'Blocks', 'assists': 'Assist',
@@ -156,8 +159,9 @@ def player_average_data(player, table_view,season):
     elif table_view == 'Per 100 Poss.':
         stats = ['points', 'rebounds', 'offensive_rebounds', 'defensive_rebounds', 'assists', 'blocks', 'turnovers']
         avg_poss = calc_Poss(player, season, False).mean()
-        avg = (season_avg[stats]/avg_poss) *100.0
+        avg = (season_avg[stats]/avg_poss) *100.0       #  PER 100 = stat/poss * 100 poss
         avg = np.round(avg, 1)
+        # Rename column headers
         avg = avg.rename(columns=
                          {'points': 'Points', 'rebounds': 'Total Rebounds', 'offensive_rebounds': 'ORB',
                           'defensive_rebounds': 'DRB', 'blocks': 'Blocks', 'assists': 'Assist',
@@ -167,11 +171,14 @@ def player_average_data(player, table_view,season):
     data = avg.to_dict('records')
     return avg, data
 
+
 ##################################################
 # ADVANCED STATS HELPER
 ##################################################
 
+
 def advanced_stats(player, season):
+    # Equations used for calculating advanced stats
     # USG%: 100 * ((FGA + 0.44 * FTA + TOV) * (Tm MP / 5)) / (MP * (Tm FGA + 0.44 * Tm FTA + Tm TOV))
     # ORtg:
     # AST%: 100 * AST / (((MP / (Tm MP / 5)) * Tm FG) - FG)
@@ -185,6 +192,8 @@ def advanced_stats(player, season):
     # (Tm FGA + 0.4 * Tm FTA - 1.07 * (Tm ORB / (Tm ORB + Opp DRB)) * (Tm FGA - Tm FG) + Tm TOV))
     # FOUL%:
     # DRB%: 100 * (DRB * (Tm MP / 5)) / (MP * (Tm DRB + Opp ORB))
+
+    # stats that we want to extract from dataset
     player_categories = ['game_id', 'field_goals_att', 'field_goals_made', 'free_throws_att', 'turnovers', 'assists',
                          'total_minutes', 'offensive_rebounds', 'blocks', 'steals', 'defensive_rebounds']
     team_categories = ['game_id', 'minutes', 'field_goals_att', 'free_throws_att', 'turnovers', 'field_goals_made',
@@ -212,6 +221,7 @@ def advanced_stats(player, season):
     # have to do this to access the actual value
     team_name = team_name[0]
 
+    # team and opponent stats by game
     team = team_boxscore[(team_boxscore['market'] == team_name) &
                          (team_boxscore['game_id'].isin(player_stats['game_id']))][team_categories]
     opponent = team_boxscore[(team_boxscore['market'] != team_name) &
@@ -221,6 +231,7 @@ def advanced_stats(player, season):
     comb = pd.merge(player_stats, comb, on='game_id')
     df = comb.drop_duplicates()
 
+    # setting variables for accessing columns in dataframe
     FGA = 'field_goals_att'
     tm_FGA = FGA + '_x'
     opp_FGA = FGA + '_y'
@@ -248,6 +259,8 @@ def advanced_stats(player, season):
     tm_3PA = 'three_points_att_x'
     opp_3PA = 'three_points_att_y'
     opp_Poss = 'opp_poss'
+
+    # converting minutes string into int
     df[MP] = df[MP].str.split(':').str.get(0)
     df[tm_MP] = df[tm_MP].str.split(':').str.get(0).astype(int) * 60 + df[tm_MP].str.split(
         ':').str.get(1).astype(int)
@@ -258,8 +271,9 @@ def advanced_stats(player, season):
             df[i] = df[i].astype(int)
 
 
-    df['opp_poss'] = calc_Poss(player,season, True)
+    df['opp_poss'] = calc_Poss(player,season, True)     #calculate opponent possession
 
+    # calculating advanced stats
     USG = 100 * ((df[FGA] + 0.44 * df[FTA] + df[TOV]) * (df[tm_MP] / 5)) / (df[MP] * (df[tm_FGA] + 0.44 * df[tm_FTA]
                                                                                       + df[tm_TOV]))
     AST = 100 * df[AST] / (((df[MP] / (df[tm_MP] / 5)) * df[tm_FG]) - df[FG])
@@ -269,6 +283,7 @@ def advanced_stats(player, season):
     STL = 100 * (df[STL] * (df[tm_MP] / 5)) / (df[MP] * df[opp_Poss])
     DRB = 100 * (df[DRB] * (df[tm_MP] / 5)) / (df[MP] * (df[tm_DRB] + df[opp_ORB]))
 
+    # putting series into dataframe
     dataframe = df[['game_id']].copy()
     dataframe['USG%'] = USG
     dataframe['AST%'] = AST
@@ -277,7 +292,7 @@ def advanced_stats(player, season):
     dataframe['BLK%'] = BLK
     dataframe['STL%'] = STL
     dataframe['DRB%'] = DRB
-    avg_columns = dataframe.mean(axis=0)
+    avg_columns = dataframe.mean(axis=0)        #avg the columns
     # rounds the columns
     avg_columns = avg_columns.round(decimals=1)
 
@@ -292,8 +307,14 @@ def advanced_stats(player, season):
 # Add new helpers here!
 ##################################################
 
+
+# Calculate Possession Stat
+# If it is the to be calculated for the opponent, switch team stats with opponent stats
+
+
 def calc_Poss(player, season, isOpp):
 
+    # stats that we want to extract from the dataset
     team_categories = ['game_id', 'minutes', 'field_goals_att', 'free_throws_att', 'turnovers', 'field_goals_made',
                        'offensive_rebounds', 'defensive_rebounds', 'three_points_att']
 
@@ -304,14 +325,18 @@ def calc_Poss(player, season, isOpp):
     # have to do this to access the actual value
     team_name = team_name[0]
 
+    # team stats
     team = team_boxscore[(team_boxscore['market'] == team_name) &
                          (team_boxscore['game_id'].isin(player_stats))][team_categories]
+    # opponent stats
     opponent = team_boxscore[(team_boxscore['market'] != team_name) &
                              (team_boxscore['game_id'].isin(player_stats))][team_categories]
 
     comb = pd.merge(team, opponent, on='game_id')
     comb = pd.merge(player_stats, comb, on='game_id')
     df = comb.drop_duplicates()
+
+    # setting variables to accesses columns in dataframe
     tm_FGA = 'field_goals_att_x'
     opp_FGA = 'field_goals_att_y'
     tm_FTA = 'free_throws_att_x'
@@ -327,12 +352,13 @@ def calc_Poss(player, season, isOpp):
     tm_DRB = 'defensive_rebounds_x'
     opp_DRB = 'defensive_rebounds_y'
 
+    # converting minute string into an int
     df[tm_MP] = df[tm_MP].str.split(':').str.get(0).astype(int) * 60 + df[tm_MP].str.split(
         ':').str.get(1).astype(int)
     df[opp_MP] = df[opp_MP].str.split(':').str.get(0).astype(int) * 60 + df[opp_MP].str.split(
         ':').str.get(1).astype(int)
 
-
+    # if is opponent poss, switch opponent stats and team stats
     if isOpp:
         poss = 0.5 * ((df[opp_FGA] + 0.4 * df[opp_FTA] - 1.07 * (df[opp_ORB] / (df[opp_ORB] + df[tm_DRB])) * (
                 df[opp_FGA] - df[opp_FG])
@@ -346,4 +372,5 @@ def calc_Poss(player, season, isOpp):
                                  df[opp_FGA] + 0.4 * df[opp_FTA] - 1.07 * (df[opp_ORB] / (df[opp_ORB] + df[tm_DRB])) * (
                                      df[opp_FGA] - df[opp_FG]) + df[opp_TOV]))
 
+    # returns a series of possession by game
     return poss
