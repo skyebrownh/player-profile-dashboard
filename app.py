@@ -232,7 +232,6 @@ def player_averages(team, player, season, stat_view):
     roster_check = np.unique(play_half[(play_half['market'] == team) & (play_half['season'] == season)]['full_name'])
     roster_check_options = [{'label': i, 'value': i} for i in roster_check]
     if stat_view == 'General':
-        # Need to do minutes per game too
         column_labels = ['PPG', 'RPG', 'BPG', 'APG', 'TO', 'MPG', 'FG%', 'FT%', '2PT%', '3PT%', 'Paint%']
     elif stat_view == 'Per 40 Min.':
         column_labels = ['Points', 'Total Rebounds', 'ORB', 'DRB', 'Assists', 'TO', 'Steals', 'Blocks']
