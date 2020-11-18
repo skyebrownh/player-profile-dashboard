@@ -14,7 +14,7 @@ player_names = np.unique(play_half['full_name'])
 
 stat_names = ['Points', 'Rebounds', 'Assists', 'TO', 'Blocks']
 #stat_choices = [0,1,2,3,4,5,6,7]
-comparison_categories = ['Career Avg.', 'Season Avg.', '5-game Avg.', 'Team Avg.']
+comparison_categories = ['Season Avg.', 'Career Avg.', '5-game Avg.', 'Team Avg.']
 
 # Box Score Options
 box_score_view = ['General', 'Shooting % By Half']

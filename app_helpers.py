@@ -375,8 +375,8 @@ def get_player_bar_plot(season, team, player, per_unit, stat_names, stat_choices
     for i in comparison_choices:
         categories.append(comparison_names[i])
     for i in range(len(data_list)):
-        #print(data_list[i].columns)
-        #print(data_list[i][stats])
+        print(data_list[i].columns)
+        print(data_list[i][stats])
         data_list[i] = data_list[i][stats].values[0]
     fig = go.Figure(data=[
         go.Bar(name=categories[i], x=stats, y=data_list[i], text=data_list[i],
