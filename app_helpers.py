@@ -383,7 +383,7 @@ def get_player_bar_plot(season, team, player, per_unit, stat_names, stat_choices
         #go.Bar(name=comparison_names[comparison_choices], x=stats, y=data_list[stat], text=data_list[stat],
                marker_color=ludis_colors[i],
                hovertemplate=
-               "<b>%{text:p}</b>"
+               ""
                ) for i in range(len(categories))])
 
     fig.update_layout(
