@@ -12,10 +12,11 @@ team_boxscore = pd.read_csv('./team_boxscores_v1.csv')
 team_names = np.unique(play_half['market'])
 player_names = np.unique(play_half['full_name'])
 
+stat_names = ['Points', 'Rebounds', 'Assists', 'TO', 'Blocks']
+#stat_choices = [0,1,2,3,4,5,6,7]
+comparison_categories = ['Career Avg.', 'Season Avg.', '5-game Avg.', 'Team Avg.']
+
 # Box Score Options
-
-
-
 box_score_view = ['General', 'Shooting % By Half']
 average_view = ['General', 'Per 40 Min.','Per 100 Poss.']
 season_view = [2019, 2018, 2017, 2016]
@@ -82,6 +83,81 @@ app.layout = html.Div(children=[
                      style_table={'maxWidth': '50%'}
                      )
     ),
+    html.H3(children='Player Comparison', style={'textAlign': 'left'}),
+    # Compare player to using bar plot
+    html.Label(children='Select Season, Team, Player, Game, Stats, Comparison Categories:',
+            style={'padding-right': '10px', 'padding-left': '10px',
+                   'backgroundColor': '#dcdcdc', 'padding-top': '10px',
+                   'borderTop': 'thin lightgrey solid'
+                   }),
+
+
+    html.Div([
+        html.Div([
+            dcc.Dropdown(
+                id='season_select_bar_plot',
+                options=[{'label': i, 'value': i} for i in season_view],
+                value=2019
+            )
+        ], style={'width': '10%', 'float': 'center', 'display': 'inline-block'}),
+        html.Div([
+            dcc.Dropdown(
+                id='team_select_bar_plot',
+                # placeholder='Select Team',
+                value='Kentucky',
+                options=[{'label': team_names[i], 'value': team_names[i]} for i in range(len(team_names))],
+            ),
+        ], style={'width': '15%', 'float': 'center', 'display': 'inline-block'}),
+        html.Div([
+            dcc.Dropdown(
+                id='player_select_bar_plot',
+                value='Ashton Hagans',
+            )
+
+        ], style={'width': '15%', 'float': 'center', 'display': 'inline-block'}),
+        #html.Div([
+        #    dcc.Dropdown(
+        #        id='game_select_bar_plot',
+        #        placeholder= 'Select Games to View...',
+        #        multi=True)
+        #], style={'width': '15%', 'float': 'center', 'display': 'inline-block'}),
+
+        html.Div([
+            dcc.Dropdown(
+                id='stats_select_bar_plot',
+                options=[{'label': stat_names[st], 'value': st} for st in range(len(stat_names))],
+                value = [0,1],
+                multi=True)], style={'width': '25%', 'float': 'center', 'display': 'inline-block'}),
+        html.Div([
+            dcc.Dropdown(
+                id='comparisons_select_bar_plot',
+                options=[{'label': comparison_categories[cc], 'value': cc} for cc in range(len(comparison_categories))],
+                value = [0,1],
+                multi=True)], style={'width': '25%', 'float': 'center', 'display': 'inline-block'}),
+        ],
+        style={
+        'backgroundColor': '#dcdcdc',
+        'padding-bottom': '15px',
+        'padding-top': '5px',
+    }),
+    html.Div([
+        dcc.RadioItems(
+            id='per_unit_select_bar_plot',
+            options=[
+                {'label': 'Per Game', 'value': 0},
+                {'label': 'Per 40 Min.', 'value': 1},
+                {'label': 'Per 100 Poss.', 'value': 2}],
+            value=0,
+            labelStyle={'display': 'inline-block', 'margin': '5px'})],
+        style={'width': '30%', 'float': 'center','padding-left': '40%',
+               'padding-right': '30%', 'padding-top': '20px',
+               'backgroundColor': '#dcdcdc',
+               'borderBottom': 'thin lightgrey solid',}),
+    html.Div([
+        dcc.Graph(
+            id='player_comparison_bar_plot',
+        )], style={'padding-bottom': '5px', 'backgroundColor': '#000000'
+                   }),
     ##################################################
     # Advanced Stats
     ##################################################
@@ -217,6 +293,48 @@ def player_box_scores(team, table_view, player, season):
 
 
 ##################################################
+# Bar Plot
+##################################################
+# For the player comparison
+
+@app.callback(
+    dash.dependencies.Output('player_select_bar_plot', 'options'),
+    #dash.dependencies.Output('game_select_bar_plot', 'options'),
+    dash.dependencies.Output('player_comparison_bar_plot', 'figure'),
+    dash.dependencies.Input('season_select_bar_plot', 'value'),
+    dash.dependencies.Input('team_select_bar_plot', 'value'),
+    #dash.dependencies.Input('game_select_bar_plot', 'value'),
+    dash.dependencies.Input('player_select_bar_plot', 'value'),
+    dash.dependencies.Input('per_unit_select_bar_plot', 'value'),
+    dash.dependencies.Input('stats_select_bar_plot', 'value'),
+    dash.dependencies.Input('comparisons_select_bar_plot', 'value')
+
+)
+# TODO: Add a game select and support for per 40/100, team averages
+
+def player_bar_plot(season, team, player, per_unit, stat_choices, comparison_choices):
+    roster = np.unique(play_half[(play_half['market'] == team)]['full_name'])
+    roster_options = [{'label': i, 'value': i} for i in roster]
+    roster_check = np.unique(play_half[(play_half['market'] == team) & (play_half['season'] == season)]['full_name'])
+    roster_check_options = [{'label': i, 'value': i} for i in roster_check]
+    #boxscore_df, data = ah.box_score_data(player, 'General', season)
+    #print(data)
+    #print(datadf)
+    #game_select_options = boxscore_df.Date + ' ' + boxscore_df.Opponent + ' ' + boxscore_df.Result
+    #sorted_gl = datadf.sort_values(by = 'date', ascending = False)
+    #game_select_options = [{'label': i, 'value': i} for i in sorted_gl[sorted_gl.team_id == team].matchup]
+    column_labels = ['Date', 'Opponent', 'Minutes', 'Efficiency', 'Points', 'Rebounds', 'Assists', 'Turnovers',
+                         'Steals', 'Blocks']
+    columns = [{"name": i, "id": i} for i in column_labels]
+    figure = ah.get_player_bar_plot(season, team, player, per_unit, stat_names, stat_choices, comparison_categories, comparison_choices)
+    # ah is apphelper.py ,
+    #datadf, data = ah.box_score_data(player, table_view, season)
+    #columns = [{"name": i, "id": i} for i in datadf.columns]
+
+    return roster_check_options, figure #game_select_options, #figure
+
+
+##################################################
 # Season Averages and Shooting Percentages
 ##################################################
 @app.callback(
@@ -240,8 +358,21 @@ def player_averages(team, player, season, stat_view):
     columns = [{"name": i, "id": i} for i in column_labels]
 
     datadf,data = ah.player_average_data(player,stat_view,season)
-    columns=[{"name":i,"id":i} for i in datadf.columns]
 
+
+    if stat_view == 'General':
+        # Renames the column headers
+        datadf = datadf.rename(columns=
+                           {'points': 'PPG', 'rebounds': 'RPG', 'blocks':'BPG','assists':'APG','turnovers':'TOPG',
+                            'total_minutes': 'MPG', 'fg%':'FG%','ft%':'FT%','2pt%':'2PT%','3pt%':'3PT%',
+                            'paint%':'Paint%'})
+    elif stat_view == 'Per 40 Min.' or stat_view == 'Per 100 Poss.':
+        datadf = datadf.rename(columns=
+                         {'points': 'Points', 'rebounds': 'Total Rebounds', 'offensive_rebounds': 'ORB',
+                          'defensive_rebounds': 'DRB', 'blocks': 'Blocks', 'assists': 'Assists',
+                          'turnovers': 'TO', 'steals': 'Steals'})
+    columns = [{"name": i, "id": i} for i in datadf.columns]
+    data = datadf.to_dict('records')
     #return roster_options, columns, data
     return roster_check_options, columns, data
 
@@ -278,6 +409,8 @@ def advanced_stats(team, player, season):
 ##################################################
 # INSERT NEW ELEMENTS HERE                       #
 ##################################################
+# player averages for: career, season, 5 games
+# compare against: position averages, team averages
 
 ##################################################
 ##################################################
