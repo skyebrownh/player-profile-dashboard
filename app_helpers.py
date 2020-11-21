@@ -18,7 +18,7 @@ player_names = np.unique(play_half['full_name'])
 ##################################################
 # BOX SCORE HELPER
 ###################################################
-def box_score_data(player, table_view, season):
+def box_score_data(player, table_view, season, team):
 
     #   TO FIX:
     #   NEED TO FIX THIS TO DO SHOOTING PERCENTAGE BY GAME NOT HALF
@@ -42,24 +42,8 @@ def box_score_data(player, table_view, season):
         gamestats = play_half[(play_half['full_name'] == player) & (play_half['season'] == season)][stats].groupby(
             'game_id').sum()
 
-        # Gets scheduled, opponenet name, and game_id
-        info = ['scheduled', 'opponent_name', 'game_id']
-        gameinfo = play_half[(play_half['full_name'] == player) & (play_half['season'] == season)][info]
-        gameinfo = gameinfo.drop_duplicates(keep="first")
-
-        # Calculates game score, merges
-        gamescoreinfo = ['game_id', 'points', 'points_against']
-        market = np.unique(play_half[(play_half['full_name'] == player) & (play_half['season'] == season)]['market'])[0]
-        gamescore = team_boxscore[(team_boxscore['market'] == market) & (team_boxscore['season'] == season)][gamescoreinfo]
-        gamescore.insert(0, 'result', "W")
-        for i in range(len(gamescore)):
-            if gamescore['points'].iloc[i] > gamescore['points_against'].iloc[i]:
-                gamescore['result'].iloc[i] = "(W, " + str(gamescore['points'].iloc[i]) + "-" + str(
-                    gamescore['points_against'].iloc[i]) + ")"
-            else:
-                gamescore['result'].iloc[i] = "(L, " + str(gamescore['points'].iloc[i]) + "-" + str(
-                    gamescore['points_against'].iloc[i]) + ")"
-        box_scores = pd.merge(gameinfo, gamescore, on='game_id').drop(columns=['points', 'points_against'])
+        # Gets game info like score, winner, date
+        box_scores = get_game_info(player, season, team)
 
         # Extracts total minutes column
         mininfo = ['total_minutes', 'game_id']
@@ -85,28 +69,29 @@ def box_score_data(player, table_view, season):
 # SEASON AVERAGES & SHOOTING STATS HELPER
 ##################################################
 
-
-def player_average_data(player, table_view, season):
-    # ['General', 'Advanced', 'Per 36','Per 100 Poss.']
+def player_average_data(player, table_view, season, team):
     player_categories = ['game_id', 'field_goals_att', 'field_goals_made', 'free_throws_att', 'turnovers', 'assists',
                          'total_minutes', 'offensive_rebounds', 'blocks', 'steals', 'defensive_rebounds', 'full_name',
                          'points', 'rebounds']
-    stats = ['points', 'rebounds', 'blocks', 'assists', 'turnovers', 'total_minutes']
-    #TODO: Fix career averages
+    stats = ['points', 'rebounds', 'blocks', 'assists', 'turnovers', 'steals', 'total_minutes']
+    # If we want career stats
     if season == 0:
         gamestats = play_half[(play_half['full_name'] == player) &
-                              (play_half['total_minutes'] != "00:00")][player_categories].groupby('game_id').sum()
+                  (play_half['total_minutes'] != "00:00")][player_categories].drop_duplicates().groupby('game_id').sum()
         # Extracts total minutes column
         mininfo = ['total_minutes', 'game_id']
         minutes = play_half[(play_half['full_name'] == player) & (play_half['total_minutes'] != '00:00')][mininfo]
-    #TODO: Check 5 game trailing average
+
+    # If we want stats from the 5 latest games
     elif season == 5:
-        gamestats = play_half[(play_half['full_name'] == player) &
-                              (play_half['total_minutes'] != "00:00")][player_categories].groupby('game_id').sum()
+        gamestats = play_half[(play_half['full_name'] == player)&(play_half['total_minutes'] != "00:00")].sort_values(
+            by='scheduled', ascending=False)
+        gamestats = gamestats[player_categories].drop_duplicates().groupby('game_id', sort=False).sum()
         gamestats = gamestats[:5]
         # Extracts total minutes column
         mininfo = ['total_minutes', 'game_id']
         minutes = play_half[(play_half['full_name'] == player) & (play_half['total_minutes'] != '00:00')][mininfo]
+    # Specific season stats
     else:
         gamestats = play_half[(play_half['full_name'] == player) & (play_half['season'] == season) & (
             play_half['total_minutes'] != "00:00")][player_categories].groupby('game_id').sum()
@@ -115,13 +100,14 @@ def player_average_data(player, table_view, season):
         minutes = play_half[(play_half['full_name'] == player) & (play_half['season'] == season)
                         & (play_half['total_minutes'] != '00:00')][mininfo]
 
-
+    # Convert minutes into int
     minutes = minutes.drop_duplicates(keep="first")
     minutes['total_minutes'] = minutes['total_minutes'].str.split(':').str.get(0).astype(int)
     # Merges all the seperate dataframes into one
     season_avg = pd.merge(gamestats, minutes, on='game_id')
+    # Average each stat
     season_avg = season_avg.mean()
-    season_avg = np.round(season_avg, 1)
+    season_avg = np.round(season_avg, 2)
     season_avg = pd.DataFrame(season_avg)
     season_avg = season_avg.transpose()
 
@@ -162,17 +148,19 @@ def player_average_data(player, table_view, season):
     # Calculate PER 40, & PER 100 Possessions
     #################################################################
     elif table_view == 'Per 40 Min.':
-        stats = ['points', 'rebounds', 'offensive_rebounds', 'defensive_rebounds', 'assists', 'blocks', 'turnovers']
+        stats = ['points', 'rebounds', 'offensive_rebounds', 'defensive_rebounds', 'assists', 'blocks', 'steals', 'turnovers']
         avg = (season_avg[stats]/season_avg['total_minutes'][0]) *40.0          # PER 40 = stat/MP * 40 min
-        avg = np.round(avg, 1)
-        # Rename column headers
+        avg = np.round(avg, 2)
 
     elif table_view == 'Per 100 Poss.':
-        stats = ['points', 'rebounds', 'offensive_rebounds', 'defensive_rebounds', 'assists', 'blocks', 'turnovers']
-        avg_poss = calc_Poss(player, season, False).mean()
+        stats = ['points', 'rebounds', 'offensive_rebounds', 'defensive_rebounds', 'assists', 'blocks', 'steals', 'turnovers']
+        games = gamestats.index
+        # Get estimated possession by game from team_boxscore.csv
+        poss = team_boxscore[(team_boxscore['game_id'].isin(games)) & (team_boxscore['market'] == team)][
+            'possessions_est']
+        avg_poss = poss.mean()
         avg = (season_avg[stats]/avg_poss) *100.0       #  PER 100 = stat/poss * 100 poss
-        avg = np.round(avg, 1)
-        # Rename column headers
+        avg = np.round(avg, 2)
 
 
     # Returns the values to be output in the table
@@ -185,8 +173,8 @@ def player_average_data(player, table_view, season):
 ##################################################
 
 
-def advanced_stats(player, season):
-    # Equations used for calculating advanced stats
+def advanced_stats(team, player, season):
+    # Equations used for calculating advanced stats from https://www.basketball-reference.com/about/glossary.html
     # USG%: 100 * ((FGA + 0.44 * FTA + TOV) * (Tm MP / 5)) / (MP * (Tm FGA + 0.44 * Tm FTA + Tm TOV))
     # ORtg:
     # AST%: 100 * AST / (((MP / (Tm MP / 5)) * Tm FG) - FG)
@@ -205,36 +193,28 @@ def advanced_stats(player, season):
     player_categories = ['game_id', 'field_goals_att', 'field_goals_made', 'free_throws_att', 'turnovers', 'assists',
                          'total_minutes', 'offensive_rebounds', 'blocks', 'steals', 'defensive_rebounds']
     team_categories = ['game_id', 'minutes', 'field_goals_att', 'free_throws_att', 'turnovers', 'field_goals_made',
-                       'offensive_rebounds', 'defensive_rebounds', 'three_points_att']
-    # 1st half
-    p1 = play_half[(play_half['full_name'] == player) & (play_half['season'] == season) & (play_half['period'] == 1)][
-        player_categories]
-    # 2nd half
-    p2 = play_half[(play_half['full_name'] == player) & (play_half['season'] == season) & (play_half['period'] == 2)][
-        player_categories]
+                       'offensive_rebounds', 'defensive_rebounds', 'three_points_att', 'possessions_est']
+    # Get desired player stats
+    player_stats = play_half[(play_half['full_name'] == player) & (play_half['season'] == season)][
+        player_categories].groupby('game_id', as_index=False).sum()
+    # Add minutes into the dataframe because sum() eliminates non-int entries
+    mininfo = ['total_minutes', 'game_id']
+    minutes = play_half[(play_half['full_name'] == player) & (play_half['game_id'].isin(player_stats['game_id']))][mininfo]
+    minutes = minutes.drop_duplicates(keep="first")
+    # Convert to int
+    minutes['total_minutes'] = minutes['total_minutes'].str.split(':').str.get(0).astype(int)
+    player_stats = pd.merge(player_stats, minutes, on='game_id')
 
-    comb = pd.merge(p1, p2, on='game_id')
-    player_stats = comb.drop_duplicates()
-
-    # combines the two halfs, literally copied and pasted from 'General' stats
-    for i in player_categories:
-        if i != 'game_id':
-            x = i + "_x"
-            y = i + "_y"
-            player_stats[i] = player_stats[x] + player_stats[y]
-    player_stats['total_minutes'] = player_stats['total_minutes_x']
-    # drops extra _x and _y columns and gives us only the combined columns
-    player_stats = player_stats[player_categories]
-    team_name = np.unique(play_half[(play_half['full_name'] == player)]['market'])
-    # have to do this to access the actual value
-    team_name = team_name[0]
-
+    team_name = team
     # team and opponent stats by game
     team = team_boxscore[(team_boxscore['market'] == team_name) &
                          (team_boxscore['game_id'].isin(player_stats['game_id']))][team_categories]
     opponent = team_boxscore[(team_boxscore['market'] != team_name) &
                              (team_boxscore['game_id'].isin(player_stats['game_id']))][team_categories]
 
+    # Combine player_stats, team stats, and opponent stats
+    # Team stats are given a suffix of _x, and opponent stats are given a suffix of _y if the column name exists in
+    # player_stats
     comb = pd.merge(team, opponent, on='game_id')
     comb = pd.merge(player_stats, comb, on='game_id')
     df = comb.drop_duplicates()
@@ -266,10 +246,9 @@ def advanced_stats(player, season):
     opp_DRB = DRB + '_y'
     tm_3PA = 'three_points_att_x'
     opp_3PA = 'three_points_att_y'
-    opp_Poss = 'opp_poss'
+    opp_Poss = 'possessions_est_y'
 
     # converting minutes string into int
-    df[MP] = df[MP].str.split(':').str.get(0)
     df[tm_MP] = df[tm_MP].str.split(':').str.get(0).astype(int) * 60 + df[tm_MP].str.split(
         ':').str.get(1).astype(int)
     df[opp_MP] = df[opp_MP].str.split(':').str.get(0).astype(int) * 60 + df[opp_MP].str.split(
@@ -278,8 +257,6 @@ def advanced_stats(player, season):
         if i != 'game_id':
             df[i] = df[i].astype(int)
 
-
-    df['opp_poss'] = calc_Poss(player,season, True)     #calculate opponent possession
 
     # calculating advanced stats
     USG = 100 * ((df[FGA] + 0.44 * df[FTA] + df[TOV]) * (df[tm_MP] / 5)) / (df[MP] * (df[tm_FGA] + 0.44 * df[tm_FTA]
@@ -308,82 +285,84 @@ def advanced_stats(player, season):
     datadf = datadf.transpose()
 
     data = datadf.to_dict('records')
-    #   print(data)
     return datadf, data
 
-
-def get_player_bar_plot(season, team, player, per_unit, stat_names, stat_choices, comparison_names, comparison_choices):
+##################################################
+# BAR CHART HELPER
+##################################################
+# Calculate game stats, season avg, career avg, 5-game trailing avg
+#TODO: Compare against season average for players in the same position as a given player
+def get_player_bar_plot(season, team, player, game_id, per_unit, stat_names, stat_choices, comparison_names, comparison_choices):
     ludis_colors = ['#A369EC', '#CBEBE5', '#476AF6', '#FF8267', '#b9b9b9', '#FFFFFF']
-    season_avg, data = player_average_data(player, 'General', season)
+    table_view=''
+    # Per unit is ppg, per40, or per100
+    if per_unit == 0:
+        table_view = 'General'
+    elif per_unit == 1:
+        table_view = 'Per 40 Min.'
+    elif per_unit == 2:
+        table_view = 'Per 100 Poss.'
+
+    # Season Avg
+    season_avg, data = player_average_data(player, table_view, season, team)
     season_avg = season_avg.rename(columns=
                          {'points': 'Points', 'rebounds': 'Rebounds', 'blocks': 'Blocks', 'assists': 'Assists',
-                          'turnovers': 'TO'})
-    season_avg = season_avg.round(2)
-    career_avg, data = player_average_data(player, 'General', 0)
+                          'steals': 'Steals', 'turnovers': 'TO'})
+    # Career Avg
+    career_avg, data = player_average_data(player, table_view, 0, team)
     career_avg = career_avg.rename(columns=
                       {'points': 'Points', 'rebounds': 'Rebounds', 'blocks': 'Blocks', 'assists': 'Assists',
-                       'turnovers': 'TO'})
-    career_avg = career_avg.round(2)
-    trailing_avg, data = player_average_data(player, 'General', 5)
+                       'steals': 'Steals', 'turnovers': 'TO'})
+    # Trailing Avg
+    trailing_avg, data = player_average_data(player, table_view, 5, team)
     trailing_avg = trailing_avg.rename(columns=
                       {'points': 'Points', 'rebounds': 'Rebounds', 'blocks': 'Blocks', 'assists': 'Assists',
-                       'turnovers': 'TO'})
-    trailing_avg = trailing_avg.round(2)
-    team_name = np.unique(play_half[(play_half['full_name'] == player)]['market'])
-    # have to do this to access the actual value
-    team_name = team_name[0]
-    """
-    league_season_avg = df_season[stats].mean().round(2)
-    team_season_avg = df_season[df_season.team_id == team][stats].round(2).values[0]
-    scout_season_avg = df_season[df_season.team_id == scout][stats].round(2).values[0]
-    team_name = df_season[(df_season.team_id == team)]['market'].values[0]
+                       'steals': 'Steals', 'turnovers': 'TO'})
 
-    if len(matchups) > 0:
-        print("hello")
+    # If a game is actually selected, find game stats
+    game_stats = []
+    if game_id.empty == False:
+        game_id=game_id.values[0]
+        game_stats = get_game_stats(player, game_id)
+        game_stats.drop(columns='game_id')
+        player_stats = ['Points', 'Rebounds', 'Blocks', 'Assists', 'TO', 'Steals']
+        if per_unit == 1:
+            game_stats = (game_stats[player_stats]/game_stats['total_minutes'][0]) *40.0          # PER 40 = stat/MP * 40 min
+            game_stats = np.round(game_stats, 2)
+        elif per_unit == 2:
+            poss = team_boxscore[(team_boxscore['game_id'] == game_id) & (team_boxscore['market'] == team)]['possessions_est']
+            poss = poss.values[0]
+            game_stats = np.round((game_stats[player_stats]/poss) *100.0, 2)
 
-        game_stats = df_game[(df_game.matchup.isin(matchups)) & \
-                             (df_game.team_id == team)][stats].mean().round(2)
-        opponents = df_game[(df_game.matchup.isin(matchups)) & \
-                            (df_game.team_id == team)]['opponent_id'].unique()
-        opponent_avg = df_season[(df_season.team_id.isin(opponents))][stats].mean().round(2)
-        opponents_game = df_game[(df_game.matchup.isin(matchups)) & \
-                                 (df_game.team_id != team)][stats].mean().round(2)
-
-    else:
-        game_stats = team_season_avg
-        opponents = df_game[(df_game.team_id == team)]['opponent_id'].unique()
-        opponent_avg = df_season[(df_season.team_id.isin(opponents))][stats].mean().round(2)
-        opponents_game = opponent_avg
-    """
-    #TODO: Automate the creation of this list
-    data_list = [season_avg, career_avg, trailing_avg]
-    #stats = ['PPG', 'RPG', 'BPG', 'APG']
-    stat = [0,1,2]
-    #comparison_choices = [0,1,2]
-    #comparison_names = ['Season Avg.', 'Career Avg.', '5-game Avg.', 'Team Avg.']
-    #for i in stat_choices:
-        #print(stat_names[i])
-        #print(data_list[i])
-    #print("stat_names: ",stat_names)
-    #print("stat_choices: ",stat_choices)
-    #print("comparison_names: ", comparison_names)
-    #print("comparison_choices: ", comparison_choices)
+    data_list = [game_stats,season_avg, career_avg, trailing_avg]
+    # get the names of the stats
     stats = []
     for i in stat_choices:
         stats.append(stat_names[i])
+
+    # get the tickvals for the x-axis
+    tickvals = []
+    for i in range(len(stat_choices)):
+        tickvals.append(i)
+
+    # get the categories for the names in the legend of the plot
     categories = []
+    data = []
+    # If the list is empty, don't add the bar category or the data (mainly for game stats)
     for i in comparison_choices:
-        categories.append(comparison_names[i])
-    for i in range(len(data_list)):
-        print(data_list[i].columns)
-        print(data_list[i][stats])
-        data_list[i] = data_list[i][stats].values[0]
+        if len(data_list[i]) != 0:
+            categories.append(comparison_names[i])
+            data.append(data_list[i])
+
+    # assign data to the different types of averages
+    for i in range(len(data)):
+        data[i] = data[i][stats].values[0]
+
+    # Bar Chart configuration
+    # name is the name that shows in the legend, x is the label for the x axis, y and text have the actual numbers
     fig = go.Figure(data=[
-        go.Bar(name=categories[i], x=stats, y=data_list[i], text=data_list[i],
-        #go.Bar(name=comparison_names[comparison_choices], x=stats, y=data_list[stat], text=data_list[stat],
+        go.Bar(name=categories[i], x=stats, y=data[i], text=data[i],
                marker_color=ludis_colors[i],
-               hovertemplate=
-               ""
                ) for i in range(len(categories))])
 
     fig.update_layout(
@@ -395,7 +374,7 @@ def get_player_bar_plot(season, team, player, per_unit, stat_names, stat_choices
                      'family': 'Courier New, monospace'}},
         xaxis=dict(
             ticktext=stats,
-            tickvals=[0, 1, 2, 3],
+            tickvals=tickvals,
             tickmode="array",
             tickfont=dict(size=15, color='#FFFFFF'),
             titlefont=dict(size=30, color='#FFFFFF')),
@@ -408,38 +387,26 @@ def get_player_bar_plot(season, team, player, per_unit, stat_names, stat_choices
     )
 
     fig.update_traces(textposition='auto',
-                      texttemplate="")
+                      texttemplate="",
+                      showlegend=True)
 
-
-    """
-    table_df = df_game[(df_game.matchup.isin(matchups)) & \
-                       (df_game.team_id == team)]
-    # print(table_df)
-    table_df = color(table_df).rename(
-        columns={'market': 'Market', "home_away": "Home/Away", 'opponent_alias': 'Opponent', 'alias_pts': 'Team Score',
-                 'opponent_pts': 'Opp. Score'})
-    table_df[stats] = table_df[stats].round(2)
-    table_df = table_df.sort_values(by='date', ascending=False)
-    data = table_df.to_dict(orient='records')
-    """
     return fig
+
+
 ##################################################
 # Add new helpers here!
 ##################################################
 
 
 # Calculate Possession Stat
-# If it is the to be calculated for the opponent, switch team stats with opponent stats
-
-
-def calc_Poss(player, season, isOpp):
+# ASSUMING that if it is the to be calculated for the opponent, switch team stats with opponent stats
+# Obsolete after we found possession was in the team_boxscore csv
+def calc_poss(player, games, isOpp):
 
     # stats that we want to extract from the dataset
     team_categories = ['game_id', 'minutes', 'field_goals_att', 'free_throws_att', 'turnovers', 'field_goals_made',
                        'offensive_rebounds', 'defensive_rebounds', 'three_points_att']
 
-    player_stats = play_half[(play_half['full_name'] == player) & (play_half['season'] == season)][
-        'game_id']
 
     team_name = np.unique(play_half[(play_half['full_name'] == player)]['market'])
     # have to do this to access the actual value
@@ -447,13 +414,12 @@ def calc_Poss(player, season, isOpp):
 
     # team stats
     team = team_boxscore[(team_boxscore['market'] == team_name) &
-                         (team_boxscore['game_id'].isin(player_stats))][team_categories]
+                         (team_boxscore['game_id'].isin(games))][team_categories]
     # opponent stats
     opponent = team_boxscore[(team_boxscore['market'] != team_name) &
-                             (team_boxscore['game_id'].isin(player_stats))][team_categories]
+                             (team_boxscore['game_id'].isin(games))][team_categories]
 
     comb = pd.merge(team, opponent, on='game_id')
-    comb = pd.merge(player_stats, comb, on='game_id')
     df = comb.drop_duplicates()
 
     # setting variables to accesses columns in dataframe
@@ -477,7 +443,7 @@ def calc_Poss(player, season, isOpp):
         ':').str.get(1).astype(int)
     df[opp_MP] = df[opp_MP].str.split(':').str.get(0).astype(int) * 60 + df[opp_MP].str.split(
         ':').str.get(1).astype(int)
-
+    df = df.drop(columns='game_id').astype(float)
     # if is opponent poss, switch opponent stats and team stats
     if isOpp:
         poss = 0.5 * ((df[opp_FGA] + 0.4 * df[opp_FTA] - 1.07 * (df[opp_ORB] / (df[opp_ORB] + df[tm_DRB])) * (
@@ -491,7 +457,54 @@ def calc_Poss(player, season, isOpp):
                       + df[tm_TOV]) + (
                                  df[opp_FGA] + 0.4 * df[opp_FTA] - 1.07 * (df[opp_ORB] / (df[opp_ORB] + df[tm_DRB])) * (
                                      df[opp_FGA] - df[opp_FG]) + df[opp_TOV]))
-
+    #team_poss = 0.5 * ((df[tm_FGA]+0.475*df[tm_FTA] - df[tm_ORB]+df[tm_TOV])+(df[opp_FGA]+0.475*df[opp_FTA]-df[opp_ORB]+df[opp_TOV]))
+    # trying a different possession calculation from https://www.sports-reference.com/blog/2014/10/per-possession-player-stats-added-to-college-basketball/
     # returns a series of possession by game
     return poss
+
+###########################################
+# GET GAME INFO
+###########################################
+# Gets scheduled date, opponent name, game_id, score, and result (W/L)
+
+def get_game_info(player, season, team):
+    info = ['scheduled', 'opponent_name', 'game_id']
+    gameinfo = play_half[(play_half['full_name'] == player) & (play_half['season'] == season)][info]
+    gameinfo = gameinfo.drop_duplicates(keep="first")
+
+    # Calculates game score, merges
+    gamescoreinfo = ['game_id', 'points', 'points_against']
+    #market = np.unique(play_half[(play_half['full_name'] == player) & (play_half['season'] == season)]['market'])[0]
+    market = team
+    gamescore = team_boxscore[(team_boxscore['market'] == market) & (team_boxscore['season'] == season)][gamescoreinfo]
+    gamescore.insert(0, 'result', "W")
+    for i in range(len(gamescore)):
+        if gamescore['points'].iloc[i] > gamescore['points_against'].iloc[i]:
+            gamescore['result'].iloc[i] = "(W, " + str(gamescore['points'].iloc[i]) + "-" + str(
+                gamescore['points_against'].iloc[i]) + ")"
+        else:
+            gamescore['result'].iloc[i] = "(L, " + str(gamescore['points'].iloc[i]) + "-" + str(
+                gamescore['points_against'].iloc[i]) + ")"
+    box_scores = pd.merge(gameinfo, gamescore, on='game_id').drop(columns=['points', 'points_against'])
+    return box_scores
+
+
+#############################################
+# GET GAME STATS
+#############################################
+# Gets the stats for a player given a game_id
+def get_game_stats(player, game_id):
+    stats = ['points', 'rebounds', 'blocks', 'assists', 'turnovers', 'steals', 'total_minutes', 'game_id']
+    game_stats = play_half[(play_half['game_id'] == game_id)
+                           & (play_half['full_name'] == player)][stats].drop_duplicates().groupby('game_id').sum()
+    mininfo = ['total_minutes', 'game_id']
+    minutes = play_half[(play_half['full_name'] == player) & (play_half['game_id'] == game_id)][mininfo]
+    minutes = minutes.drop_duplicates(keep="first")
+    minutes['total_minutes'] = minutes['total_minutes'].str.split(':').str.get(0).astype(int)
+    game_stats = pd.merge(game_stats, minutes, on='game_id')
+    game_stats = game_stats.rename(columns=
+                      {'points': 'Points', 'rebounds': 'Rebounds', 'blocks': 'Blocks', 'assists': 'Assists',
+                       'steals': 'Steals', 'turnovers': 'TO'})
+
+    return game_stats
 
